@@ -1,0 +1,21 @@
+# Local ComfyUI runtime and downloaded models
+ComfyUI_windows_portable/
+downloads/
+logs/
+
+# Generated media and user uploads
+wan_local_ui/uploads/
+*.mp4
+*.webm
+*.mov
+*.avi
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Windows / editor files
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
