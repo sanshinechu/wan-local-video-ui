@@ -62,11 +62,13 @@ def api_json(path, payload=None, timeout=30):
         return json.loads(body.decode("utf-8"))
 
 
-def frames_from_seconds(seconds, fps):
+def frames_from_seconds(seconds, fps, mode="t2v"):
     frames = int(seconds * fps) + 1
     remainder = (frames - 1) % 4
     if remainder:
         frames += 4 - remainder
+    if mode == "i2v":
+        frames = min(frames, 17)
     return max(5, frames)
 
 
@@ -87,7 +89,7 @@ def build_prompt(data):
     seed = int(data.get("seed") or random.randrange(1, 2**32 - 1))
     positive = data.get("prompt", "").strip()
     negative = data.get("negative", "").strip() or "low quality, blurry, distorted, watermark, text"
-    frames = frames_from_seconds(seconds, fps)
+    frames = frames_from_seconds(seconds, fps, mode)
     prefix = f"WanLocal/{time.strftime('%Y%m%d_%H%M%S')}_{clean_prefix(positive)}"
 
     if mode == "i2v":
@@ -406,6 +408,7 @@ INDEX_HTML = """<!doctype html>
         <div>
           <label for="seconds">秒數</label>
           <select id="seconds">
+            <option value="1">1 秒</option>
             <option value="2">2 秒</option>
             <option value="3" selected>3 秒</option>
             <option value="4">4 秒</option>
@@ -555,6 +558,12 @@ async function poll(promptId, progress) {
   clearTimeout(polling);
   try {
     const data = await api(`/api/job/${promptId}`);
+    if (data.error) {
+      setBar(0);
+      setLog(`生成失敗：${data.error}`);
+      $("generate").disabled = false;
+      return;
+    }
     if (data.done) {
       setBar(100);
       setLog("影片生成完成。");
@@ -615,7 +624,17 @@ class Handler(BaseHTTPRequestHandler):
                 history = api_json(f"/history/{parse.quote(prompt_id)}", timeout=10)
                 item = history.get(prompt_id)
                 if item:
-                    self.send_json(200, {"done": True, "outputs": find_outputs(item)})
+                    status = item.get("status", {})
+                    if status.get("status_str") == "error" or status.get("completed") is False:
+                        message = "ComfyUI 生成失敗。"
+                        for entry in status.get("messages", []):
+                            if entry and entry[0] == "execution_error":
+                                err = entry[1]
+                                message = f"{err.get('node_type', 'ComfyUI')}: {err.get('exception_message', message)}"
+                                break
+                        self.send_json(200, {"done": False, "error": message})
+                    else:
+                        self.send_json(200, {"done": True, "outputs": find_outputs(item)})
                 else:
                     queue = api_json("/queue", timeout=10)
                     running = any(row[1] == prompt_id for row in queue.get("queue_running", []))
@@ -676,3 +695,4 @@ if __name__ == "__main__":
     os.chdir(PROJECT)
     print(f"Wan local UI: http://{HOST}:{PORT}")
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+
