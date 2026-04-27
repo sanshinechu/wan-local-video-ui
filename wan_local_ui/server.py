@@ -613,7 +613,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/status":
             try:
-                api_json("/system_stats", timeout=5)
+                api_json("/object_info", timeout=10)
                 self.send_json(200, {"ok": True})
             except Exception as exc:
                 self.send_json(200, {"ok": False, "error": str(exc)})
